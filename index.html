@@ -1,0 +1,706 @@
+import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
+
+// ============================================================================
+// 1. MOCK DATA & PRESETS
+// ============================================================================
+const PRESETS = {
+  kospi: {
+    title: "KOSPI (한국 종합주가지수)",
+    summary: "최근 미국 연준의 고금리 장기화 우려 및 정부의 기업 밸류업 프로그램 발표가 맞물린 혼조세 속에서 반도체 수출 호조가 시장 하단을 지지하고 있습니다.",
+    topKeywords: ["금리 동결", "밸류업", "반도체 수출", "외인 매수", "환율 불안", "수출 실적"],
+    longTermOutlook: "정부 주도의 세제 개편안과 연기금의 장기 한국 주식 비중 확대 기조가 장기 하단을 탄탄하게 지지하고 있습니다. 하절기 전력 예비율 압박과 계절적 기후 수급 동향이 중요한 거시 공급망 변수로 작동 중입니다.",
+    shortTermOutlook: "선물 만기일과 연동된 금융투자의 차익 프로그램 매도세 및 단기 외인 매매 동향이 박스권 장세를 연출하는 핵심 단기 변수입니다.",
+    timeline: [
+      { date: "Day 1", event: "美 연준 FOMC 금리 동결 발표", macroScore: -3, microScore: -1, instMacro: -2, instMicro: -1, explanation: "고금리 장기화 우려로 매크로 하락 압력 발생, 기관 장기 자금 보수적 포지션 전환" },
+      { date: "Day 2", event: "국민연금 등 대형 연기금 매수 개시 및 밸류업 발표", macroScore: 5, microScore: 2, instMacro: 8, instMicro: 3, explanation: "세제 혜택 공식화 기대감에 따라 장단기 연기금 기관 바스켓 수급 유입" },
+      { date: "Day 3", event: "금융투자 대규모 일일 프로그램 순매도", macroScore: 2, microScore: -6, instMacro: 1, instMicro: -8, explanation: "장기 펀더멘털은 견고하나 금융투자의 단기 프로그램 매물 집중 출하로 지수 급락" },
+      { date: "Day 4", event: "정부 자본 시장 외인 등록제 폐지 효과", macroScore: 6, microScore: 1, instMacro: 5, instMicro: 2, explanation: "제도 개선으로 중장기 자산 배분 성격의 기관 및 외인 장기 유입 자극" },
+      { date: "Day 5", event: "옵션 만기일 단기 차익거래 청산 발생", macroScore: -4, microScore: -7, instMacro: 0, instMicro: -9, explanation: "선물 스프레드 축소에 따른 단기 기관 금융투자의 프로그램 차익 매도 폭탄" },
+      { date: "Day 6", event: "사모펀드 저가 낙폭과대주 숏커버링 유입", macroScore: -1, microScore: 6, instMacro: -1, instMicro: 7, explanation: "과도한 하락으로 인해 단기 차익 실현 포지션 청산(숏커버) 수급 급증" },
+      { date: "Day 7", event: "대형 자산운용사 국내 주식 비중 일제 상향", macroScore: 8, microScore: 3, instMacro: 9, instMicro: 2, explanation: "반도체 장기 사이클 우상향 확신 및 장기 기관 포트폴리오 리밸런싱 동반 상승" },
+      { date: "Day 8", event: "일시적 단기 헤지펀드 선물 매도 충격", macroScore: 6, microScore: -4, instMacro: 4, instMicro: -5, explanation: "펀더멘털은 우수하지만, 선물 만기를 겨냥한 단기 공매도 수급 과열" },
+      { date: "Day 9", event: "우체국예금 및 연기금 추가 블록딜 유입", macroScore: 8, microScore: 2, instMacro: 7, instMicro: 3, explanation: "안정적 기금 유입 소식으로 시장 신뢰감 형성 및 건설/지주사 랠리" },
+      { date: "Day 10", event: "외인 및 기관 양대 메이저 동반 쌍끌이 순매수", macroScore: 9, microScore: 9, instMacro: 9, instMicro: 8, explanation: "장기 수급과 일일 프로그램 매수세가 완벽 일치하며 전고점 탈환 시도" }
+    ],
+    backtest: {
+      "6m": { points: [{ label: "1월", actual: 100 }, { label: "2월", actual: 102.5 }, { label: "3월", actual: 98.2 }, { label: "4월", actual: 104.0 }, { label: "5월", actual: 103.5 }, { label: "6월", actual: 109.1 }] },
+      "1y": { points: [{ label: "전년 7월", actual: 92.1 }, { label: "8월", actual: 94.5 }, { label: "9월", actual: 92.0 }, { label: "10월", actual: 88.5 }, { label: "11월", actual: 95.2 }, { label: "12월", actual: 97.8 }, { label: "올해 1월", actual: 100.0 }, { label: "2월", actual: 102.5 }, { label: "3월", actual: 98.2 }, { label: "4월", actual: 104.0 }, { label: "5월", actual: 103.5 }, { label: "6월", actual: 109.1 }] }
+    }
+  },
+  nvidia: {
+    title: "NVIDIA (엔비디아)",
+    summary: "AI 인프라 확장 수혜가 여전한 가운데 차세대 블랙웰 칩의 생산 병목 현상 해결 여부와 빅테크 기업들의 인프라 투자 지속 여부가 최대 화두입니다.",
+    topKeywords: ["Blackwell", "AI 인프라", "독점력", "생산 병목", "실적 가이드", "빅테크 CapEx"],
+    longTermOutlook: "미국 최대 뮤추얼 펀드 및 초대형 기관 투자자의 반도체 장기 비중 유지가 거시 지지대 역할을 담당합니다. 한편 데이터센터 확장에 따른 글로벌 친환경 냉각 기술 및 전력 수급 가시성이 새로운 장기 변수입니다.",
+    shortTermOutlook: "분기 실적 발표를 앞두고 기관 단기 트레이더들의 헤징 목적 콜/풋 옵션 거래량 급증 및 프로그램 매매 변동성 확대가 주요 변수입니다.",
+    timeline: [
+      { date: "Day 1", event: "피델리티 등 3대 뮤추얼 펀드 추가 편입 공시", macroScore: 8, microScore: 3, instMacro: 8, instMicro: 2, explanation: "장기 투자자 편입 소식에 장기 투자 심리 대폭 고조" },
+      { date: "Day 2", event: "대만 지진 관련 공급망 병목 우려", macroScore: 5, microScore: -5, instMacro: 3, instMicro: -6, explanation: "TSMC 생산 차질 우려에 따른 단기 헤지펀드의 차익 실현" },
+      { date: "Day 3", event: "경쟁사 신규 칩 출시 및 수급 분산 우려", macroScore: 4, microScore: -2, instMacro: 5, instMicro: -3, explanation: "경쟁 수급 진입 소식이 있었으나 AI 패권 장악력 유지로 방어" },
+      { date: "Day 4", event: "미 하원 의원들의 주요 지분 매각 뉴스", macroScore: 1, microScore: -6, instMacro: -3, instMicro: -7, explanation: "내부 인사 차익실현 신호에 따른 단기 추세 왜곡 및 기관 투매" },
+      { date: "Day 5", event: "글로벌 연기금의 ESG 규제 대상 예외 판정", macroScore: 6, microScore: 4, instMacro: 7, instMicro: 3, explanation: "안정적인 전력 제어 노력이 인정되며 연기금 수급 유입" },
+      { date: "Day 6", event: "단기 투자은행(IB)들의 공매도 리포트", macroScore: 5, microScore: -7, instMacro: 0, instMicro: -8, explanation: "고평가 부담 보고서로 촉발된 사모펀드 집중 공매도 매물" },
+      { date: "Day 7", event: "자산운용사 블랙웰 칩 사전 예약 대금 납입 증명", macroScore: 7, microScore: 2, instMacro: 8, instMicro: 4, explanation: "미래 실적 성장에 대한 신뢰로 장기 기관 가중치 재상향" },
+      { date: "Day 8", event: "분기 어닝 서프라이즈 공식 발표", macroScore: 9, microScore: 9, instMacro: 9, instMicro: 9, explanation: "실적 충격과 압도적 가이드라인에 숏스퀴즈 물량 동반 유입" },
+      { date: "Day 9", event: "기관 공매도 포지션 마진콜 청산 발생", macroScore: 9, microScore: 8, instMacro: 8, instMicro: 9, explanation: "공매도 세력의 숏커버 포지션 청산으로 지수 오버슈팅 유발" },
+      { date: "Day 10", event: "연간 자산 재배분 당일 포지션 종료", macroScore: 8, microScore: -3, instMacro: 6, instMicro: -5, explanation: "단기 이익 실현을 위한 기관 창구 프로그램 매물 분출로 숨고르기" }
+    ],
+    backtest: {
+      "6m": { points: [{ label: "1월", actual: 100 }, { label: "2월", actual: 114.2 }, { label: "3월", actual: 108.4 }, { label: "4월", actual: 122.1 }, { label: "5월", actual: 119.5 }, { label: "6월", actual: 135.4 }] },
+      "1y": { points: [{ label: "전년 7월", actual: 78.5 }, { label: "8월", actual: 82.3 }, { label: "9월", actual: 80.1 }, { label: "10월", actual: 74.6 }, { label: "11월", actual: 88.4 }, { label: "12월", actual: 95.0 }, { label: "올해 1월", actual: 100.0 }, { label: "2월", actual: 114.2 }, { label: "3월", actual: 108.4 }, { label: "4월", actual: 122.1 }, { label: "5월", actual: 119.5 }, { label: "6월", actual: 135.4 }] }
+    }
+  },
+  us_rate: {
+    title: "미국 기준금리 및 거시경제",
+    summary: "소비자물가지수(CPI)의 끈적한 흐름이 지속되면서 연준의 피벗 타이밍이 계속 지연되고 있으나 고용 지표 완화가 균형을 맞추고 있습니다.",
+    topKeywords: ["CPI 물가", "피벗 지연", "고용 둔화", "연준 위원 발언", "양적 긴축", "국채 금리"],
+    longTermOutlook: "미 국채 장기물에 대한 대형 은행 및 글로벌 연기금의 장기 포지션 가치가 핵심 거시 변수입니다. 엘니뇨 현상으로 인한 글로벌 농작물 가격 교란(애그플레이션) 요인도 주시해야 합니다.",
+    shortTermOutlook: "정기 국채 발행 일정에 따른 딜러 기관들의 단기 헤지 수급과 주간 실업 수당 수치 발표에 따른 일일 프로그램 청산이 대립합니다.",
+    timeline: [
+      { date: "Day 1", event: "근원 CPI 예상치 상회 발표", macroScore: -7, microScore: -4, instMacro: -6, instMicro: -3, explanation: "인플레이션 고착화 우려에 연기금 자본 일제히 채권 매도세 주도" },
+      { date: "Day 2", event: "연준 인사들의 연속적 매파 긴축 지지", macroScore: -8, microScore: -3, instMacro: -7, instMicro: -5, explanation: "단기 금리 동결 우려로 트레이더들의 프로그램 차익 매도 폭탄" },
+      { date: "Day 3", event: "유럽중앙은행(ECB) 선제적 금리 인하", macroScore: -5, microScore: 3, instMacro: -4, instMicro: 4, explanation: "통화 완화 공조 기대감으로 일시적 단기 투자 사모펀드 자금 회귀" },
+      { date: "Day 4", event: "실업 청구 건수 폭증으로 고용 둔화", macroScore: -2, microScore: 5, instMacro: 1, instMicro: 6, explanation: "피벗 명분 획득에 따른 중장기 국채 주도 은행권 매수세 유입" },
+      { date: "Day 5", event: "국채 10년물 입찰 흥행 실패", macroScore: -4, microScore: -5, instMacro: -3, instMicro: -6, explanation: "채권 인수 기관들의 일시적 물량 기피로 인한 단기 채권 금리 폭등" },
+      { date: "Day 6", event: "국내 민간 기조 소비 감소 발표", macroScore: -2, microScore: 2, instMacro: -1, instMicro: 3, explanation: "경기 수축 우려로 금리 인하 기대가 작용하며 자산운용사 매수 지지" },
+      { date: "Day 7", event: "FOMC 긴축 통화정책 의사록 발표", macroScore: -6, microScore: -3, instMacro: -5, instMicro: -4, explanation: "장기 고금리 기조 수긍 소식에 대형 연기금 장기 포트폴리오 안전자산 이동" },
+      { date: "Day 8", event: "미국 비농업 고용 완만한 지표 발표", macroScore: 2, microScore: 6, instMacro: 3, instMicro: 7, explanation: "이상적 경기 지표로 채권 딜러들이 대규모 숏포지션 조기 청산" },
+      { date: "Day 9", event: "에너지 원유 가격 단기 폭락", macroScore: 4, microScore: 4, instMacro: 4, instMicro: 5, explanation: "물가 하락 압력이 호재로 작용하며 장단기 수급 모멘텀 회복" },
+      { date: "Day 10", event: "소비자 신뢰지수 대폭 후퇴", macroScore: 1, microScore: -3, instMacro: 2, instMicro: -5, explanation: "장기 수요는 확대되었으나 주식 기관 바스켓의 일일 차익 물량 출하" }
+    ],
+    backtest: {
+      "6m": { points: [{ label: "1월", actual: 100 }, { label: "2월", actual: 96.5 }, { label: "3월", actual: 95.8 }, { label: "4월", actual: 98.4 }, { label: "5월", actual: 96.0 }, { label: "6월", actual: 101.5 }] },
+      "1y": { points: [{ label: "전년 7월", actual: 105.4 }, { label: "8월", actual: 102.1 }, { label: "9월", actual: 98.9 }, { label: "10월", actual: 96.4 }, { label: "11월", actual: 99.2 }, { label: "12월", actual: 101.0 }, { label: "올해 1월", actual: 100.0 }, { label: "2월", actual: 96.5 }, { label: "3월", actual: 95.8 }, { label: "4월", actual: 98.4 }, { label: "5월", actual: 96.0 }, { label: "6월", actual: 101.5 }] }
+    }
+  }
+};
+
+const DYNAMIC_STOCK_POOL = [
+  { symbol: "005930", name: "삼성전자", baseReason: "AI 인프라 및 메모리(HBM) 시장 지배력 확대 기조.", macroFit: 0.9, microFit: 0.6, climateFit: 0.2, instMacroFit: 0.95, instMicroFit: 0.8, baseBadge: "HBM 주도" },
+  { symbol: "005380", name: "현대차", baseReason: "저평가 밸류업 프로그램 및 자사주 환원 수혜.", macroFit: 0.8, microFit: 0.7, climateFit: 0.3, instMacroFit: 0.9, instMicroFit: 0.6, baseBadge: "밸류업/환원" },
+  { symbol: "373220", name: "LG에너지솔루션", baseReason: "글로벌 친환경 정책 및 북미 대형 배터리 독점 수주.", macroFit: 0.85, microFit: 0.5, climateFit: 0.75, instMacroFit: 0.8, instMicroFit: 0.7, baseBadge: "ESG/수주" },
+  { symbol: "005180", name: "빙그레", baseReason: "역대급 폭염 기후 고착화에 따른 하절기 집중 매출 스파이크.", macroFit: 0.2, microFit: 0.95, climateFit: 0.9, instMacroFit: 0.4, instMicroFit: 0.9, baseBadge: "하절기 수혜" },
+  { symbol: "267260", name: "HD현대일렉트릭", baseReason: "AI 데이터센터 폭발에 따른 고압 변압기 인프라 장기 호황.", macroFit: 0.95, microFit: 0.8, climateFit: 0.5, instMacroFit: 0.85, instMicroFit: 0.85, baseBadge: "인프라 대장" },
+  { symbol: "015760", name: "한국전력", baseReason: "하절기 초고온 현상 및 냉방 전력 수요 급증, 요금 인상 수혜.", macroFit: 0.75, microFit: 0.4, climateFit: 0.95, instMacroFit: 0.85, instMicroFit: 0.5, baseBadge: "전력/기후" },
+  { symbol: "000660", name: "SK하이닉스", baseReason: "글로벌 빅테크 CapEx 상향에 따른 고성능 반도체 실적 가시화.", macroFit: 0.85, microFit: 0.9, climateFit: 0.3, instMacroFit: 0.9, instMicroFit: 0.95, baseBadge: "AI 모멘텀" },
+  { symbol: "009830", name: "한화솔루션", baseReason: "탄소 배출 규제 수혜 및 미 태양광 생산 세액 공제 장기화.", macroFit: 0.9, microFit: 0.55, climateFit: 0.85, instMacroFit: 0.75, instMicroFit: 0.65, baseBadge: "신재생에너지" }
+];
+
+// ============================================================================
+// 순수 수학적 유틸리티 함수 (렌더링 부하 방지용)
+// ============================================================================
+const formatCountdown = (totalSeconds) => {
+  const m = Math.floor(Number(totalSeconds) / 60) || 0;
+  const s = (Number(totalSeconds) || 0) % 60;
+  return `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
+};
+
+const getAlignedActuals = (points, targetLength) => {
+  if (!points || points.length === 0 || targetLength <= 0) return [];
+  const aligned = [];
+  for (let i = 0; i < targetLength; i++) {
+    const fraction = targetLength > 1 ? i / (targetLength - 1) : 0;
+    const exactIdx = fraction * Math.max(0, points.length - 1);
+    const low = Math.floor(exactIdx);
+    const high = Math.min(points.length - 1, Math.ceil(exactIdx));
+    if (low === high || !points[high]) {
+      aligned.push(Number(points[low]?.actual) || 100);
+    } else {
+      const t = exactIdx - low;
+      aligned.push((Number(points[low].actual) * (1 - t)) + (Number(points[high].actual) * t));
+    }
+  }
+  return aligned;
+};
+
+const calculatePearsonCorrelation = (x, y) => {
+  const n = Math.min(x.length, y.length);
+  if (n <= 1) return 0;
+  const sumX = x.reduce((a, b) => a + (Number(b) || 0), 0);
+  const sumY = y.reduce((a, b) => a + (Number(b) || 0), 0);
+  const sumXY = x.reduce((sum, val, i) => sum + (Number(val) || 0) * (Number(y[i]) || 0), 0);
+  const sumX2 = x.reduce((sum, val) => sum + Math.pow(Number(val) || 0, 2), 0);
+  const sumY2 = y.reduce((sum, val) => sum + Math.pow(Number(val) || 0, 2), 0);
+  const num = n * sumXY - sumX * sumY;
+  const den = Math.sqrt((n * sumX2 - sumX * sumX) * (n * sumY2 - sumY * sumY));
+  return den === 0 || isNaN(den) ? 0 : num / den;
+};
+
+const evaluateParameters = (wm, ws, li, si, targetPoints, currentData, bPrice) => {
+  if (!targetPoints || targetPoints.length === 0) return { loss: Infinity, mape: 0, hitRatio: 0, r: 0 };
+  const targetStart = Number(targetPoints[0].actual) || 100;
+  const alignedActuals = getAlignedActuals(targetPoints, currentData.length);
+  const normalizedAct = alignedActuals.map(p => (p / targetStart) * 100);
+
+  let currentPrice = Number(bPrice) || 100;
+  const simulatedPrices = currentData.map(point => {
+    const rawInstMacro = point.instMacro !== undefined ? point.instMacro : ((Number(point.macroScore)||0) * 0.5);
+    const rawInstMicro = point.instMicro !== undefined ? point.instMicro : ((Number(point.microScore)||0) * 0.5);
+    const macroAdj = (Number(point.macroScore)||0) + (rawInstMacro * li);
+    const microAdj = (Number(point.microScore)||0) + (rawInstMicro * si);
+    const combinedDelta = (wm * macroAdj + ws * microAdj);
+    const scaledDelta = Math.max(-18, Math.min(18, combinedDelta)) / 100;
+    currentPrice = currentPrice * (1 + scaledDelta);
+    return currentPrice;
+  });
+  
+  const normalizedSim = simulatedPrices.map(p => (p / (Number(bPrice)||100)) * 100);
+
+  let sumAbsPercentError = 0;
+  for (let i = 0; i < normalizedSim.length; i++) {
+    const actVal = normalizedAct[i] || 0.1;
+    sumAbsPercentError += Math.abs(normalizedSim[i] - actVal) / actVal;
+  }
+  const mape = (sumAbsPercentError / Math.max(1, normalizedSim.length)) * 100;
+  const r = calculatePearsonCorrelation(normalizedSim, normalizedAct) || 0;
+  const corrLoss = (1 - r) * 30; 
+
+  let hits = 0, totalSteps = 0;
+  for (let i = 1; i < normalizedSim.length; i++) {
+    const simDelta = normalizedSim[i] - normalizedSim[i - 1];
+    const actDelta = normalizedAct[i] - normalizedAct[i - 1];
+    if ((simDelta >= 0 && actDelta >= 0) || (simDelta < 0 && actDelta < 0)) hits++;
+    totalSteps++;
+  }
+  const hitRatio = totalSteps > 0 ? (hits / totalSteps) * 100 : 0;
+  const hitLoss = (100 - hitRatio) * 0.8; 
+
+  return { loss: mape + corrLoss + hitLoss, mape, hitRatio, r };
+};
+
+// ============================================================================
+// APP COMPONENT
+// ============================================================================
+export default function App() {
+  const [activePreset, setActivePreset] = useState("kospi");
+  const [data, setData] = useState(PRESETS.kospi.timeline);
+  const [metaInfo, setMetaInfo] = useState(PRESETS.kospi);
+
+  const [macroWeight, setMacroWeight] = useState(0.6); 
+  const [microWeight, setMicroWeight] = useState(0.4); 
+  const [instLongTermIntensity, setInstLongTermIntensity] = useState(1.0);  
+  const [instShortTermIntensity, setInstShortTermIntensity] = useState(1.0); 
+  const [basePrice, setBasePrice] = useState(100);     
+  
+  const [hoveredPoint, setHoveredPoint] = useState(null);
+  const [backtestPeriod, setBacktestPeriod] = useState("6m");
+  const [hoveredBacktestPoint, setHoveredBacktestPoint] = useState(null);
+
+  const [secondsLeft, setSecondsLeft] = useState(3599); 
+  const [lastUpdatedTime, setLastUpdatedTime] = useState("");
+  const [recommendationRandomizer, setRecommendationRandomizer] = useState(1.0);
+  
+  const [isAutoOptimized, setIsAutoOptimized] = useState(true); 
+  const [optStatusLog, setOptStatusLog] = useState("대기 중...");
+  
+  const [dynamicCorrelation, setDynamicCorrelation] = useState("N/A");
+  const [dynamicHitRatio, setDynamicHitRatio] = useState("N/A");
+  const [dynamicMAPE, setDynamicMAPE] = useState("N/A");
+
+  const [searchQuery, setSearchQuery] = useState("");
+  const [isLoading, setIsLoading] = useState(false);
+  const [miningLog, setMiningLog] = useState([]);
+
+  // 1. Processed Data Generation (Pure logic, safely memoized)
+  const processedData = useMemo(() => {
+    let currentIntegrated = Number(basePrice) || 100;
+    return data.map((point) => {
+      const rawInstMacro = point.instMacro !== undefined ? point.instMacro : ((Number(point.macroScore)||0) * 0.5);
+      const rawInstMicro = point.instMicro !== undefined ? point.instMicro : ((Number(point.microScore)||0) * 0.5);
+      const macroAdj = (Number(point.macroScore)||0) + (rawInstMacro * Number(instLongTermIntensity));
+      const microAdj = (Number(point.microScore)||0) + (rawInstMicro * Number(instShortTermIntensity));
+      const total = macroAdj + microAdj;
+      
+      const combinedDelta = (Number(macroWeight) * macroAdj + Number(microWeight) * microAdj);
+      const scaledDelta = Math.max(-18, Math.min(18, combinedDelta)) / 100;
+      currentIntegrated = currentIntegrated * (1 + scaledDelta);
+
+      return {
+        ...point,
+        macroScoreAdj: parseFloat(macroAdj.toFixed(1)),
+        microScoreAdj: parseFloat(microAdj.toFixed(1)),
+        total: parseFloat(total.toFixed(1)),
+        integrated: parseFloat(currentIntegrated.toFixed(2))
+      };
+    });
+  }, [data, macroWeight, microWeight, instLongTermIntensity, instShortTermIntensity, basePrice]);
+
+  // 2. AI Optimizer (Isolated entirely to prevent infinite re-renders)
+  const executeOptimizer = useCallback(() => {
+    if (!isAutoOptimized) return;
+    const activeBacktest = PRESETS[activePreset]?.backtest?.[backtestPeriod];
+    const backtestPoints = activeBacktest?.points || [];
+    if (backtestPoints.length === 0) return;
+
+    let bestLoss = Infinity;
+    let coarseWm = 0.6, coarseLi = 1.0, coarseSi = 1.0;
+
+    for (let wm = 0.1; wm <= 0.9; wm += 0.1) {
+      const ws = 1.0 - wm;
+      for (let li = -1.5; li <= 2.0; li += 0.5) {
+        for (let si = -1.5; si <= 2.0; si += 0.5) {
+          const res = evaluateParameters(wm, ws, li, si, backtestPoints, data, basePrice);
+          if (res.loss < bestLoss) { bestLoss = res.loss; coarseWm = wm; coarseLi = li; coarseSi = si; }
+        }
+      }
+    }
+
+    let finalBestWm = coarseWm, finalBestLi = coarseLi, finalBestSi = coarseSi, finalMinLoss = bestLoss;
+    const wmStart = Math.max(0.05, coarseWm - 0.1), wmEnd = Math.min(0.95, coarseWm + 0.1);
+    const liStart = Math.max(-2.0, coarseLi - 0.4), liEnd = Math.min(2.0, coarseLi + 0.4);
+    const siStart = Math.max(-2.0, coarseSi - 0.4), siEnd = Math.min(2.0, coarseSi + 0.4);
+
+    for (let wm = wmStart; wm <= wmEnd; wm += 0.02) {
+      const ws = 1.0 - wm;
+      for (let li = liStart; li <= liEnd; li += 0.1) {
+        for (let si = siStart; si <= siEnd; si += 0.1) {
+          const res = evaluateParameters(wm, ws, li, si, backtestPoints, data, basePrice);
+          if (res.loss < finalMinLoss) { finalMinLoss = res.loss; finalBestWm = wm; finalBestLi = li; finalBestSi = si; }
+        }
+      }
+    }
+
+    setMacroWeight(parseFloat(finalBestWm.toFixed(2)));
+    setMicroWeight(parseFloat((1.0 - finalBestWm).toFixed(2)));
+    setInstLongTermIntensity(parseFloat(finalBestLi.toFixed(2)));
+    setInstShortTermIntensity(parseFloat(finalBestSi.toFixed(2)));
+
+    const finalMetrics = evaluateParameters(finalBestWm, 1.0 - finalBestWm, finalBestLi, finalBestSi, backtestPoints, data, basePrice);
+    setDynamicCorrelation(Number(finalMetrics.r).toFixed(2));
+    setDynamicHitRatio(`${Number(finalMetrics.hitRatio).toFixed(1)}%`);
+    setDynamicMAPE(`${Number(finalMetrics.mape).toFixed(2)}%`);
+    setOptStatusLog(`[최적화 완료] 오차 최소화: w_M=${finalBestWm.toFixed(2)}, Inst_M=${finalBestLi.toFixed(1)}`);
+  }, [isAutoOptimized, activePreset, backtestPeriod, basePrice, data]);
+
+  // Trigger optimization strictly once upon specific user actions
+  useEffect(() => {
+    executeOptimizer();
+  }, [activePreset, backtestPeriod, isAutoOptimized, basePrice, executeOptimizer]);
+
+  // 3. Manual Mode Metrics Updater
+  useEffect(() => {
+    if (isAutoOptimized) return;
+    const activeBacktest = PRESETS[activePreset]?.backtest?.[backtestPeriod];
+    const backtestPoints = activeBacktest?.points || [];
+    if (backtestPoints.length === 0) return;
+
+    const metrics = evaluateParameters(macroWeight, microWeight, instLongTermIntensity, instShortTermIntensity, backtestPoints, data, basePrice);
+    setDynamicCorrelation(Number(metrics.r).toFixed(2));
+    setDynamicHitRatio(`${Number(metrics.hitRatio).toFixed(1)}%`);
+    setDynamicMAPE(`${Number(metrics.mape).toFixed(2)}%`);
+    setOptStatusLog("수동 제어 모드 활성화됨.");
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [macroWeight, microWeight, instLongTermIntensity, instShortTermIntensity, isAutoOptimized, activePreset, backtestPeriod, basePrice, data]);
+
+  // 4. Timer Logic
+  useEffect(() => {
+    const formatTime = () => {
+      const now = new Date();
+      return `${now.getHours()}시 ${now.getMinutes()}분 ${now.getSeconds()}초`;
+    };
+    setLastUpdatedTime(formatTime());
+
+    const interval = setInterval(() => {
+      setSecondsLeft((prev) => {
+        if (prev <= 1) {
+          setRecommendationRandomizer(0.9 + Math.random() * 0.2);
+          setLastUpdatedTime(formatTime());
+          return 3599; 
+        }
+        return prev - 1;
+      });
+    }, 1000);
+    return () => clearInterval(interval);
+  }, []);
+
+  const handlePresetChange = (presetKey) => {
+    setActivePreset(presetKey);
+    setData(PRESETS[presetKey].timeline);
+    setMetaInfo(PRESETS[presetKey]);
+  };
+
+  // 5. Dynamic Recommendations
+  const avgMacroScore = processedData.length > 0 ? processedData.reduce((sum, d) => sum + (Number(d.macroScoreAdj)||0), 0) / processedData.length : 0;
+  const avgMicroScore = processedData.length > 0 ? processedData.reduce((sum, d) => sum + (Number(d.microScoreAdj)||0), 0) / processedData.length : 0;
+
+  const dynamicRecommendations = useMemo(() => {
+    return DYNAMIC_STOCK_POOL.map((stock) => {
+      const macroCont = stock.macroFit * avgMacroScore * macroWeight * 10;
+      const microCont = stock.microFit * avgMicroScore * microWeight * 10;
+      const instMacroCont = stock.instMacroFit * avgMacroScore * instLongTermIntensity * 4;
+      const instMicroCont = stock.instMicroFit * avgMicroScore * instShortTermIntensity * 4;
+      const climateCont = stock.climateFit * (Math.sin(new Date().getHours() / 12) * 5);
+
+      let finalScore = 50 + (macroCont + microCont + instMacroCont + instMicroCont + climateCont) * recommendationRandomizer;
+      finalScore = Math.max(15, Math.min(99, parseFloat(finalScore.toFixed(1))));
+
+      let reasoningSuffix = isAutoOptimized ? ` [AI 보정] 최적 융합 적합도(${finalScore}점) 달성.` : ` 수급 분석 융합 추천.`;
+
+      return {
+        name: `${stock.name} (${stock.symbol})`,
+        score: finalScore,
+        badge: stock.baseBadge,
+        reason: `${stock.baseReason}${reasoningSuffix}`
+      };
+    }).sort((a, b) => b.score - a.score).slice(0, 5);
+  }, [avgMacroScore, avgMicroScore, macroWeight, microWeight, instLongTermIntensity, instShortTermIntensity, recommendationRandomizer, isAutoOptimized]);
+
+  const handleManualRefreshRecs = () => {
+    setRecommendationRandomizer(0.85 + Math.random() * 0.3);
+  };
+
+  // 6. SVG Render Pre-calculations (Ensures safety from NaN inside JSX)
+  const chartWidth = 720, chartHeight = 320, paddingX = 70, paddingY = 40;
+  const leftMin = -20, leftMax = 20;
+  
+  const rightValues = processedData.map(d => Number(d.integrated) || basePrice);
+  const safeRightValues = rightValues.length > 0 ? rightValues : [basePrice];
+  const rightMin = Math.min(...safeRightValues, basePrice) * 0.95;
+  const rightMax = Math.max(...safeRightValues, basePrice) * 1.05;
+
+  const safeDataLength = Math.max(1, processedData.length - 1);
+  const getX = (idx) => paddingX + (idx / safeDataLength) * (chartWidth - paddingX * 2);
+  const getYLeft = (val) => chartHeight - paddingY - ((val - leftMin) / Math.max(1, leftMax - leftMin)) * (chartHeight - paddingY * 2);
+  const getYRight = (val) => chartHeight - paddingY - ((val - rightMin) / Math.max(1, rightMax - rightMin)) * (chartHeight - paddingY * 2);
+
+  const activeBacktestData = PRESETS[activePreset]?.backtest?.[backtestPeriod];
+  const backtestPoints = activeBacktestData?.points || [];
+  const backtestChartHeight = 220;
+  
+  const safeBtValues = backtestPoints.map(p => Number(p.actual) || 100);
+  const backtestMinY = safeBtValues.length > 0 ? Math.min(...safeBtValues) * 0.95 : 0;
+  const backtestMaxY = safeBtValues.length > 0 ? Math.max(...safeBtValues) * 1.05 : 100;
+  const safeBtLength = Math.max(1, backtestPoints.length - 1);
+
+  const getBacktestY = (val) => backtestChartHeight - paddingY - ((val - backtestMinY) / Math.max(1, backtestMaxY - backtestMinY)) * (backtestChartHeight - paddingY * 2);
+  const getBacktestX = (idx) => paddingX + (idx / safeBtLength) * (chartWidth - paddingX * 2);
+
+  const mainMacroPath = processedData.length > 0 ? processedData.map((d, i) => `${i === 0 ? 'M' : 'L'} ${getX(i)} ${getYLeft(Number(d.macroScoreAdj)||0)}`).join(' ') : "";
+  const mainMicroPath = processedData.length > 0 ? processedData.map((d, i) => `${i === 0 ? 'M' : 'L'} ${getX(i)} ${getYLeft(Number(d.microScoreAdj)||0)}`).join(' ') : "";
+  const mainTotalPath = processedData.length > 0 ? processedData.map((d, i) => `${i === 0 ? 'M' : 'L'} ${getX(i)} ${getYLeft(Number(d.total)||0)}`).join(' ') : "";
+  const mainIntegratedPath = processedData.length > 0 ? processedData.map((d, i) => `${i === 0 ? 'M' : 'L'} ${getX(i)} ${getYRight(Number(d.integrated)||basePrice)}`).join(' ') : "";
+
+  const btActualPath = backtestPoints.length > 0 ? backtestPoints.map((p, i) => `${i === 0 ? 'M' : 'L'} ${getBacktestX(i)} ${getBacktestY(Number(p.actual)||100)}`).join(' ') : "";
+  const btScaleFactor = backtestPoints.length > 0 ? (Number(backtestPoints[0]?.actual) || 100) / (Number(basePrice)||100) : 1;
+  const btSimLinePath = backtestPoints.length > 0 ? backtestPoints.map((p, i) => {
+    const fraction = i / safeBtLength;
+    const simIdx = Math.round(fraction * safeDataLength);
+    const simVal = (Number(processedData[simIdx]?.integrated) || basePrice) * btScaleFactor;
+    return `${i === 0 ? 'M' : 'L'} ${getBacktestX(i)} ${getBacktestY(simVal)}`;
+  }).join(' ') : "";
+
+  const maxAmplitude = processedData.length > 0 ? Math.max(0, ...processedData.map(d => Math.abs(Number(d.total)||0))) : 0;
+  const integratedRate = processedData.length > 0 ? (((Number(processedData[processedData.length - 1].integrated)||basePrice) - basePrice) / basePrice) * 100 : 0;
+  const isIntegratedPos = integratedRate >= 0;
+
+  // Tooltip pre-calculations
+  let hoveredMainDate = "", hoveredMainIntegrated = 0, hoveredMainExplanation = "";
+  if (hoveredPoint !== null && processedData[hoveredPoint]) {
+    hoveredMainDate = processedData[hoveredPoint].date || ""; 
+    hoveredMainIntegrated = Number(processedData[hoveredPoint].integrated) || basePrice; 
+    hoveredMainExplanation = processedData[hoveredPoint].explanation || "";
+  }
+
+  let hoveredBtLabel = "", hoveredBtActVal = 0, hoveredBtSimVal = 0, hoveredBtError = 0;
+  if (hoveredBacktestPoint !== null && backtestPoints[hoveredBacktestPoint]) {
+    hoveredBtLabel = backtestPoints[hoveredBacktestPoint].label || "";
+    hoveredBtActVal = Number(backtestPoints[hoveredBacktestPoint].actual) || 100;
+    const fraction = hoveredBacktestPoint / safeBtLength;
+    const simIdx = Math.round(fraction * safeDataLength);
+    hoveredBtSimVal = (Number(processedData[simIdx]?.integrated) || basePrice) * btScaleFactor;
+    hoveredBtError = hoveredBtActVal !== 0 ? Math.abs((hoveredBtSimVal - hoveredBtActVal) / hoveredBtActVal) * 100 : 0;
+  }
+
+  // 7. Dummy Simulator
+  const runLiveAnalysis = async (query) => {
+    if (!query.trim()) return;
+    setIsLoading(true); setMiningLog([]); setMiningStep(1);
+    const log = (msg) => setMiningLog(prev => [...prev, `[${new Date().toLocaleTimeString()}] ${msg}`]);
+
+    try {
+      log(`📡 검색 질의어 분석: "${query}"...`);
+      await new Promise(r => setTimeout(r, 1200));
+      setMiningStep(2);
+      log("🧪 NLP 엔진 가동: 명사/형태소 토큰화 진행...");
+      await new Promise(r => setTimeout(r, 1300));
+      setMiningStep(3);
+      log("⚠️ 가상 데이터셋을 생성합니다.");
+      await new Promise(r => setTimeout(r, 1000));
+      
+      setData(Array.from({ length: 10 }, (_, i) => ({
+          date: `Day ${i + 1}`,
+          event: `${query} 관련 데이터 #${i + 1}`,
+          macroScore: Math.floor(Math.sin((i + 1) * 1.1) * 7),
+          microScore: Math.floor(Math.cos((i + 1) * 1.5) * 8),
+          instMacro: Math.floor(Math.sin((i + 1) * 1.3) * 6) + 1,
+          instMicro: Math.floor(Math.cos((i + 1) * 1.7) * 7) - 1,
+          explanation: `시뮬레이션 데이터 산출됨.`
+      })));
+      setMetaInfo({
+        title: `${query} (가상 예측 모델)`,
+        summary: `${query} 테마 실시간 융합 마이닝.`,
+        topKeywords: [query, "기관 매수", "프로그램", "수급분석"],
+        longTermOutlook: "기관 비중 확대 거시 지지력 작용.",
+        shortTermOutlook: "만기 수급 매물 국지적 발생."
+      });
+      log("✅ 시뮬레이션 완료!");
+      setIsLoading(false); setMiningStep(0);
+    } catch (err) {
+      log(`❌ 에러 발생됨.`);
+      setIsLoading(false); setMiningStep(0);
+    }
+  };
+
+  return (
+    <div className="font-sans flex flex-col min-h-screen bg-slate-950 text-slate-100">
+      <header className="border-b border-slate-800 bg-slate-900/90 px-6 py-4 flex flex-wrap items-center justify-between sticky top-0 z-50">
+        <div className="flex items-center space-x-3">
+          <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-indigo-500 via-purple-500 to-pink-500 flex items-center justify-center shadow-lg">
+            <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 002 2h2a2 2 0 002-2z" /></svg>
+          </div>
+          <div>
+            <h1 className="text-xl font-bold tracking-tight text-indigo-300">
+              SENTILYTICS <span className="text-xs font-semibold text-slate-400 border border-slate-700 px-1.5 py-0.5 rounded ml-1 bg-slate-950">V3.0 FIXED</span>
+            </h1>
+            <p className="text-xs text-slate-400">주식 시장 장·단기 센티먼트 실시간 오차보정 플랫폼</p>
+          </div>
+        </div>
+      </header>
+
+      <main className="flex-1 max-w-7xl w-full mx-auto p-4 lg:p-6 grid grid-cols-1 lg:grid-cols-12 gap-6">
+        
+        {/* 좌측 패널 영역 */}
+        <div className="lg:col-span-4 space-y-6">
+          
+          {/* AUTO-CALIBRATION */}
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-xl relative overflow-hidden">
+            <div className="absolute top-0 left-0 right-0 h-[2px] bg-gradient-to-r from-emerald-500 to-cyan-500"></div>
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-sm font-semibold text-slate-300 flex items-center gap-2">
+                <span className="relative flex h-2.5 w-2.5">
+                  <span className={`animate-ping absolute inline-flex h-full w-full rounded-full opacity-75 ${isAutoOptimized ? "bg-emerald-400" : "bg-slate-600"}`}></span>
+                  <span className={`relative inline-flex rounded-full h-2.5 w-2.5 ${isAutoOptimized ? "bg-emerald-500" : "bg-slate-500"}`}></span>
+                </span>
+                AI 가중치 정밀 보정
+              </h2>
+              <button onClick={() => setIsAutoOptimized(!isAutoOptimized)} className={`w-12 h-6 rounded-full p-1 transition-colors duration-300 ${isAutoOptimized ? 'bg-emerald-500' : 'bg-slate-800'}`}>
+                <div className={`bg-white w-4 h-4 rounded-full shadow transform transition-transform duration-300 ${isAutoOptimized ? 'translate-x-6' : 'translate-x-0'}`}></div>
+              </button>
+            </div>
+            <div className="bg-slate-950 rounded-xl p-3 border border-slate-800 text-[10px] font-mono space-y-1">
+              <div className="flex justify-between border-b border-slate-900 pb-1.5 mb-1.5">
+                <span className="text-slate-500">솔버 상태:</span>
+                <span className={isAutoOptimized ? "text-emerald-400 font-bold" : "text-slate-500"}>{isAutoOptimized ? "ACTIVE" : "MANUAL"}</span>
+              </div>
+              <div className="text-slate-300 truncate">{isAutoOptimized ? optStatusLog : "수동 모드 활성화됨."}</div>
+              <div className="flex justify-between pt-1">
+                <span className="text-slate-500">실시간 피팅 오차(MAPE):</span>
+                <span className="text-cyan-400 font-bold">{dynamicMAPE}</span>
+              </div>
+            </div>
+          </div>
+
+          {/* SEARCH */}
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-xl relative">
+            <h2 className="text-sm font-semibold text-slate-300 mb-4">실시간 뉴스 마이닝</h2>
+            <div className="space-y-3">
+              <div className="flex gap-2">
+                <input type="text" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} placeholder="종목명 입력..." className="flex-1 bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-sm text-white focus:outline-none" />
+                <button onClick={() => runLiveAnalysis(searchQuery)} disabled={isLoading} className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 rounded-lg text-sm transition">
+                  {isLoading ? "로딩" : "분석"}
+                </button>
+              </div>
+              <div className="grid grid-cols-3 gap-2">
+                {Object.keys(PRESETS).map((key) => (
+                  <button key={key} onClick={() => handlePresetChange(key)} disabled={isLoading} className={`py-2 text-xs rounded-lg border transition ${activePreset === key ? "bg-indigo-950/40 border-indigo-500 text-indigo-300" : "bg-slate-950 border-slate-800 text-slate-400"}`}>
+                    {String(PRESETS[key].title).split(" ")[0]}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          {/* PARAMS */}
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-xl space-y-4">
+            <div className={isAutoOptimized ? "opacity-40 pointer-events-none" : ""}>
+              <div className="flex justify-between text-xs text-slate-300 mb-1">
+                <span>거시 가중치 ($w_M$)</span><span className="text-indigo-400">{(Number(macroWeight) * 100).toFixed(0)}%</span>
+              </div>
+              <input type="range" min="0" max="1" step="0.05" value={macroWeight} onChange={(e) => { setMacroWeight(parseFloat(e.target.value)); setMicroWeight(parseFloat((1 - parseFloat(e.target.value)).toFixed(2))); }} className="w-full accent-indigo-500 h-1 bg-slate-800 rounded-lg appearance-none cursor-pointer" />
+            </div>
+            
+            <div className={isAutoOptimized ? "opacity-40 pointer-events-none" : ""}>
+              <div className="flex justify-between text-[11px] text-slate-400 mb-1">
+                <span>기관 장기 강도 ($Inst_M$)</span><span className="text-cyan-400">{Number(instLongTermIntensity).toFixed(1)}x</span>
+              </div>
+              <input type="range" min="-2.0" max="2.0" step="0.5" value={instLongTermIntensity} onChange={(e) => setInstLongTermIntensity(parseFloat(e.target.value))} className="w-full accent-cyan-500 h-1 bg-slate-800 rounded-lg appearance-none cursor-pointer" />
+            </div>
+
+            <div className={isAutoOptimized ? "opacity-40 pointer-events-none" : ""}>
+              <div className="flex justify-between text-[11px] text-slate-400 mb-1">
+                <span>기관 단기 강도 ($Inst_S$)</span><span className="text-pink-400">{Number(instShortTermIntensity).toFixed(1)}x</span>
+              </div>
+              <input type="range" min="-2.0" max="2.0" step="0.5" value={instShortTermIntensity} onChange={(e) => setInstShortTermIntensity(parseFloat(e.target.value))} className="w-full accent-pink-500 h-1 bg-slate-800 rounded-lg appearance-none cursor-pointer" />
+            </div>
+          </div>
+
+          {/* RECS */}
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-xl">
+            <h3 className="text-sm font-semibold text-slate-300 flex items-center justify-between mb-3">
+              <span>융합 추천 종목</span>
+              <span className="text-[10px] font-mono text-emerald-400 bg-slate-950 px-2 py-1 rounded">갱신: {formatCountdown(secondsLeft)}</span>
+            </h3>
+            <div className="space-y-3">
+              {dynamicRecommendations.map((stock, i) => (
+                <div key={i} className="bg-slate-950/80 p-3 rounded-xl border border-slate-800/80">
+                  <div className="flex items-center justify-between mb-1.5">
+                    <span className="font-bold text-xs text-slate-200">{i + 1}. {stock.name}</span>
+                    <span className="text-xs font-bold text-emerald-400 font-mono">{stock.score}점</span>
+                  </div>
+                  <div className="w-full bg-slate-900 h-1 rounded-full overflow-hidden mb-1.5">
+                    <div className="bg-gradient-to-r from-indigo-500 to-emerald-400 h-1 rounded-full" style={{ width: `${stock.score}%` }}></div>
+                  </div>
+                  <p className="text-[10px] text-slate-400">{stock.reason}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+
+        </div>
+
+        {/* RIGHT COL */}
+        <div className="lg:col-span-8 space-y-6">
+          
+          {/* SUMMARY CARDS */}
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <div className="bg-slate-900 border border-slate-800 p-4 rounded-2xl">
+              <span className="text-xs text-slate-400">보정 거시 평균</span>
+              <div className="text-2xl font-bold text-indigo-400 mt-2">{Number(avgMacroScore).toFixed(1)}</div>
+            </div>
+            <div className="bg-slate-900 border border-slate-800 p-4 rounded-2xl">
+              <span className="text-xs text-slate-400">보정 단기 평균</span>
+              <div className="text-2xl font-bold text-purple-400 mt-2">{Number(avgMicroScore).toFixed(1)}</div>
+            </div>
+            <div className="bg-slate-900 border border-slate-800 p-4 rounded-2xl">
+              <span className="text-xs text-slate-400">최대 진폭</span>
+              <div className="text-2xl font-bold text-amber-400 mt-2">{Number(maxAmplitude).toFixed(1)}</div>
+            </div>
+            <div className="bg-slate-900 border border-slate-800 p-4 rounded-2xl">
+              <span className="text-xs text-slate-400">예측 누적률</span>
+              <div className={`text-2xl font-bold mt-2 ${isIntegratedPos ? "text-emerald-400" : "text-rose-400"}`}>
+                {isIntegratedPos ? "+" : ""}{Number(integratedRate).toFixed(1)}%
+              </div>
+            </div>
+          </div>
+
+          {/* MAIN CHART */}
+          <div className="bg-slate-900 border border-slate-800 rounded-3xl p-5 shadow-2xl relative">
+            <h3 className="text-base font-bold text-slate-100 mb-6">{metaInfo.title} 종합 예측</h3>
+            <div className="relative h-80 w-full select-none" style={{ touchAction: 'none' }}>
+              <svg className="w-full h-full" viewBox="0 0 720 320" onMouseMove={(e) => {
+                  const rect = e.currentTarget.getBoundingClientRect();
+                  const svgX = (e.clientX - rect.left) * (chartWidth / rect.width);
+                  let nearestIdx = 0, minDist = Infinity;
+                  for (let i = 0; i < processedData.length; i++) {
+                    const px = getX(i); const dist = Math.abs(svgX - px);
+                    if (dist < minDist) { minDist = dist; nearestIdx = i; }
+                  }
+                  setHoveredPoint(nearestIdx);
+                }} onMouseLeave={() => setHoveredPoint(null)}>
+                
+                {[-20, -10, 0, 10, 20].map((tick) => (
+                  <line key={tick} x1={paddingX} y1={getYLeft(tick)} x2={chartWidth - paddingX} y2={getYLeft(tick)} stroke={tick===0?"#f59e0b":"white"} strokeWidth={tick===0?1.5:1} className="opacity-10" />
+                ))}
+
+                {mainMacroPath && <path d={mainMacroPath} fill="none" stroke="#818cf8" strokeWidth="2" className="opacity-70" />}
+                {mainMicroPath && <path d={mainMicroPath} fill="none" stroke="#c084fc" strokeWidth="2" className="opacity-70" />}
+                {mainIntegratedPath && <path d={mainIntegratedPath} fill="none" stroke="#34d399" strokeWidth="4" className="drop-shadow-[0_0_8px_rgba(52,211,153,0.5)]" />}
+
+                {hoveredPoint !== null && processedData[hoveredPoint] && (
+                  <g>
+                    <line x1={getX(hoveredPoint)} y1={paddingY} x2={getX(hoveredPoint)} y2={chartHeight - paddingY} stroke="#475569" strokeWidth="1.5" strokeDasharray="2 2" />
+                    <circle cx={getX(hoveredPoint)} cy={getYRight(hoveredMainIntegrated)} r="6" fill="#34d399" stroke="#0f172a" strokeWidth="2" />
+                  </g>
+                )}
+              </svg>
+
+              {hoveredPoint !== null && processedData[hoveredPoint] && (
+                <div className="absolute z-20 bg-slate-900/95 border border-slate-700/80 p-3.5 rounded-xl shadow-2xl text-xs" style={{ left: `${Math.min(chartWidth - 250, Math.max(20, (getX(hoveredPoint) / chartWidth) * 100))}%`, top: "10%" }}>
+                  <div className="font-bold text-slate-100 border-b border-slate-800 pb-1 mb-1">{hoveredMainDate} 분석</div>
+                  <div className="text-emerald-400 font-bold">지수: {Number(hoveredMainIntegrated).toFixed(1)}</div>
+                  <p className="text-slate-400 text-[10.5px] mt-1">{hoveredMainExplanation}</p>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* BACKTEST CHART */}
+          <div className="bg-slate-900 border border-slate-800 rounded-3xl p-5 shadow-2xl relative">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-base font-bold text-slate-100">백테스팅 검증 (실제 vs 모델)</h3>
+              <div className="flex bg-slate-950 border border-slate-800 p-1 rounded-xl">
+                <button onClick={() => setBacktestPeriod("6m")} className={`px-3 py-1 text-xs font-semibold rounded-lg transition-all ${backtestPeriod === "6m" ? "bg-cyan-600 text-white shadow" : "text-slate-400"}`}>6개월</button>
+                <button onClick={() => setBacktestPeriod("1y")} className={`px-3 py-1 text-xs font-semibold rounded-lg transition-all ${backtestPeriod === "1y" ? "bg-cyan-600 text-white shadow" : "text-slate-400"}`}>1개년</button>
+              </div>
+            </div>
+            
+            <div className="grid grid-cols-3 gap-3 mb-5">
+              <div className="bg-slate-950/60 p-3 rounded-xl text-center"><span className="text-[10px] text-slate-500">상관계수 (r)</span><span className="text-lg font-bold text-cyan-400 block">{dynamicCorrelation}</span></div>
+              <div className="bg-slate-950/60 p-3 rounded-xl text-center"><span className="text-[10px] text-slate-500">방향 적중률</span><span className="text-lg font-bold text-emerald-400 block">{dynamicHitRatio}</span></div>
+              <div className="bg-slate-950/60 p-3 rounded-xl text-center"><span className="text-[10px] text-slate-500">오차율 (MAPE)</span><span className="text-lg font-bold text-purple-400 block">{dynamicMAPE}</span></div>
+            </div>
+
+            <div className="relative h-60 w-full select-none" style={{ touchAction: 'none' }}>
+              <svg className="w-full h-full" viewBox="0 0 720 220" onMouseMove={(e) => {
+                  const rect = e.currentTarget.getBoundingClientRect();
+                  const svgX = (e.clientX - rect.left) * (chartWidth / rect.width);
+                  let nearestIdx = 0, minDist = Infinity;
+                  for (let i = 0; i < backtestPoints.length; i++) {
+                    const px = getBacktestX(i); const dist = Math.abs(svgX - px);
+                    if (dist < minDist) { minDist = dist; nearestIdx = i; }
+                  }
+                  setHoveredBacktestPoint(nearestIdx);
+                }} onMouseLeave={() => setHoveredBacktestPoint(null)}>
+                
+                {btActualPath && <path d={btActualPath} fill="none" stroke="#94a3b8" strokeWidth="2.5" className="opacity-60" />}
+                {btSimLinePath && <path d={btSimLinePath} fill="none" stroke="#22d3ee" strokeWidth="3" className="drop-shadow-[0_0_4px_rgba(34,211,238,0.4)]" />}
+
+                {hoveredBacktestPoint !== null && backtestPoints[hoveredBacktestPoint] && (
+                  <g>
+                    <line x1={getBacktestX(hoveredBacktestPoint)} y1={paddingY} x2={getBacktestX(hoveredBacktestPoint)} y2={backtestChartHeight - paddingY} stroke="#475569" strokeWidth="1" strokeDasharray="2 2" />
+                    <circle cx={getBacktestX(hoveredBacktestPoint)} cy={getBacktestY(hoveredBtActVal)} r="5" fill="#94a3b8" stroke="#0f172a" strokeWidth="1.5" />
+                    <circle cx={getBacktestX(hoveredBacktestPoint)} cy={getBacktestY(hoveredBtSimVal)} r="5" fill="#22d3ee" stroke="#0f172a" strokeWidth="1.5" />
+                  </g>
+                )}
+              </svg>
+
+              {hoveredBacktestPoint !== null && backtestPoints[hoveredBacktestPoint] && (
+                <div className="absolute z-20 bg-slate-900 border border-slate-700 p-2.5 rounded-lg shadow-xl text-[11px]" style={{ left: `${Math.min(chartWidth - 190, Math.max(10, (getBacktestX(hoveredBacktestPoint) / chartWidth) * 100))}%`, top: "10%" }}>
+                  <div className="font-bold text-slate-200 mb-1">{hoveredBtLabel} 오차 점검</div>
+                  <div className="text-slate-400">실제: <span className="text-white">{Number(hoveredBtActVal).toFixed(1)}</span></div>
+                  <div className="text-cyan-400">예측: <span className="font-bold">{Number(hoveredBtSimVal).toFixed(1)}</span></div>
+                  <div className="text-purple-400 mt-1 pt-1 border-t border-slate-800">오차: {Number(hoveredBtError).toFixed(2)}%</div>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* INSIGHTS */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 relative">
+              <div className="absolute top-0 left-0 w-1.5 h-full bg-indigo-500"></div>
+              <h4 className="text-sm font-bold text-indigo-400 mb-2">거시 & 정책 보고서</h4>
+              <p className="text-xs text-slate-300">{metaInfo.longTermOutlook}</p>
+            </div>
+            <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 relative">
+              <div className="absolute top-0 left-0 w-1.5 h-full bg-purple-500"></div>
+              <h4 className="text-sm font-bold text-purple-400 mb-2">단기 미시 & 계절적 수급</h4>
+              <p className="text-xs text-slate-300">{metaInfo.shortTermOutlook}</p>
+            </div>
+          </div>
+
+        </div>
+      </main>
+    </div>
+  );
+}
